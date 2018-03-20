@@ -223,6 +223,72 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         task.resume()
     }
     
+    private func uploadFileRequest(filePathName: String, fileType: String, fileName: String, successBlock: @escaping (Data?, URLResponse?) -> Swift.Void, failedBlock: @escaping (Error?) -> Swift.Void) {
+        // ファイルをもらう
+        guard let documentPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first else { fatalError("File not found")
+        }
+        let filePath = documentPath + "/" + "path" + "/" + filePathName + "." + fileType
+        let fileURL = URL.init(fileURLWithPath: filePath)
+        let data = try! Data(contentsOf: fileURL)
+        
+        // リクエストを生成する
+        var request: URLRequest = URLRequest(url: URL(string: "http://api.nohttp.net/upload")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        
+        // リクエストのボデイを生成する
+        let uniqueId = ProcessInfo.processInfo.globallyUniqueString
+        let body: NSMutableData = NSMutableData()
+        let boundary:String = "---------------------------\(uniqueId)"
+        
+        request.addValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var postStr :String = String()
+        postStr += "--\(boundary)\r\n"
+        postStr += "Content-Disposition: form-data; name=\"p\"\r\n"
+        let uuid = "123456"
+        postStr += "\r\n\(uuid)\r\n"
+        postStr += "--\(boundary)\r\n"
+        postStr += "Content-Disposition: form-data; name=\"f\"; filename=\"\(fileName)\"\r\n"
+        postStr += "Content-Type: application/octet-stream\r\n\r\n"
+        body.append(postStr.data(using: String.Encoding.utf8)!)
+        
+        body.append(data as Data)
+        
+        var postStr2 = String()
+        postStr2 += "\r\n"
+        postStr2 += "\r\n--\(boundary)--\r\n"
+        body.append(postStr2.data(using: String.Encoding.utf8)!)
+        
+        request.httpBody = NSData(data:body as Data) as Data
+        //        request.httpBody = body as Data
+        
+        
+        // リクエストを実行する
+        let config = URLSessionConfiguration.default
+        let session = URLSession(configuration: config)
+        let task: URLSessionDataTask = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
+            // 成功と失敗を分けてしまう
+            if response != nil {
+                let res = response as! HTTPURLResponse
+                
+                let string1 = String(data: data!, encoding: String.Encoding.utf8)!
+                print(string1)
+                
+                if res.statusCode == 200 {
+
+                } else {
+                    failedBlock(error)
+                }
+            } else {
+                failedBlock(error)
+            }
+        })
+        
+        // taskをresumeして
+        task.resume()
+    }
+    
     // MARK:- 汪晶晶不爱我
     
     func inputStringToLog(string: String) {
