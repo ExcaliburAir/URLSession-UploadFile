@@ -223,16 +223,19 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         task.resume()
     }
     
-    private func uploadFileRequest(filePathName: String, fileType: String, fileName: String, successBlock: @escaping (Data?, URLResponse?) -> Swift.Void, failedBlock: @escaping (Error?) -> Swift.Void) {
+    // http head and body form
+    
+    func uploadFileRequest(filePathName: String, fileType: String, fileName: String, successBlock: @escaping (Data?, URLResponse?) -> Swift.Void, failedBlock: @escaping (Error?) -> Swift.Void) {
         // ファイルをもらう
-        guard let documentPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first else { fatalError("File not found")
+        guard let documentPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first else {
+            fatalError("File not found")
         }
-        let filePath = documentPath + "/" + "path" + "/" + filePathName + "." + fileType
+        let filePath = documentPath + "/" + "a" + "/" + filePathName + "." + fileType
         let fileURL = URL.init(fileURLWithPath: filePath)
         let data = try! Data(contentsOf: fileURL)
         
         // リクエストを生成する
-        var request: URLRequest = URLRequest(url: URL(string: "http://api.nohttp.net/upload")!)
+        var request: URLRequest = URLRequest(url: URL(string: "")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 60
         
@@ -240,47 +243,98 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         let uniqueId = ProcessInfo.processInfo.globallyUniqueString
         let body: NSMutableData = NSMutableData()
         let boundary:String = "---------------------------\(uniqueId)"
-        
-        request.addValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
+        let uuid = "123"
         var postStr :String = String()
+        // http head
+        request.addValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        // set http string form and combin transform to data
         postStr += "--\(boundary)\r\n"
         postStr += "Content-Disposition: form-data; name=\"p\"\r\n"
-        let uuid = "123456"
         postStr += "\r\n\(uuid)\r\n"
         postStr += "--\(boundary)\r\n"
         postStr += "Content-Disposition: form-data; name=\"f\"; filename=\"\(fileName)\"\r\n"
         postStr += "Content-Type: application/octet-stream\r\n\r\n"
         body.append(postStr.data(using: String.Encoding.utf8)!)
-        
+        // string data plus voice data
         body.append(data as Data)
-        
+        // end string to data
         var postStr2 = String()
         postStr2 += "\r\n"
         postStr2 += "\r\n--\(boundary)--\r\n"
         body.append(postStr2.data(using: String.Encoding.utf8)!)
-        
+        // NSData to data
         request.httpBody = NSData(data:body as Data) as Data
-        //        request.httpBody = body as Data
-        
         
         // リクエストを実行する
         let config = URLSessionConfiguration.default
         let session = URLSession(configuration: config)
         let task: URLSessionDataTask = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error in
             // 成功と失敗を分けてしまう
-            if response != nil {
+            let dict = try? JSONSerialization.jsonObject(with: data!, options: .mutableContainers)
+            if dict != nil {
+                // 反応があるリクエスト、まずdata中で、情報がある
                 let res = response as! HTTPURLResponse
-                
-                let string1 = String(data: data!, encoding: String.Encoding.utf8)!
-                print(string1)
-                
                 if res.statusCode == 200 {
-
+                    // サーバが失敗に判定するか
+                    if self.ifServerSuccessed(dic: dict as! Dictionary<String, Any>) {
+                        successBlock(data, response)
+                    } else {
+                        failedBlock(error)
+                    }
                 } else {
+                    print("RequestManager : status code != 200")
                     failedBlock(error)
                 }
             } else {
+                print("RequestManager : リクエスト解析エラー!")
+                failedBlock(error)
+            }
+        })
+        
+        // taskをresumeして
+        task.resume()
+    }
+    
+    func checkServerStatuRequest(fileName: String, successBlock: @escaping (Data?, URLResponse?) -> Swift.Void, failedBlock: @escaping (Error?) -> Swift.Void) {
+        // requestを生成して
+        var request: URLRequest = URLRequest(url: URL(string: "")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        
+        // make http head and body
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        let params: [String : Any] = [
+            "f": fileName,
+            "d": true
+        ]
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: params, options: []) else {
+            print("RequestManager : JSONSerialization失敗!")
+            return
+        }
+        request.httpBody = httpBody
+        
+        // session、request、fileからtaskを生成して
+        let config = URLSessionConfiguration.default
+        let session = URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue())
+        let task = session.dataTask(with: request as URLRequest, completionHandler: { data, response, error -> Void in
+            // 成功と失敗を分けてしまう
+            let dict = try? JSONSerialization.jsonObject(with: data!, options: .mutableContainers)
+            if dict != nil {
+                // 反応があるリクエスト、まずdata中で、情報がある
+                let res = response as! HTTPURLResponse
+                if res.statusCode == 200 {
+                    // サーバが失敗に判定するか
+                    if self.ifServerSuccessed(dic: dict as! Dictionary<String, Any>) {
+                        successBlock(data, response)
+                    } else {
+                        failedBlock(error)
+                    }
+                } else {
+                    print("RequestManager : status code != 200")
+                    failedBlock(error)
+                }
+            } else {
+                print("RequestManager : リクエスト解析エラー!")
                 failedBlock(error)
             }
         })
@@ -329,6 +383,64 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         // main thread で更新する
         DispatchQueue.main.sync {
             self.progressView.progress = uploadProgress
+        }
+    }
+    
+    // MARK:- Deal Whith String
+    
+    private func get_uuid_fromDictionary(dic: Dictionary<String, Any>!) -> String {
+        let result = dic["p"] as! String
+        
+        if result.isEmpty {
+            return ""
+        } else {
+            return result
+        }
+    }
+    
+    private func getUploadUrl(dic: Dictionary<String, Any>!) -> String {
+        let result = dic["u"] as! String
+        
+        if result.isEmpty {
+            return ""
+        } else {
+            return result
+        }
+    }
+    
+    private func ifServerSuccessed(dic: Dictionary<String, Any>!) -> Bool {
+        let result = dic["r"] as! String
+        
+        if result == "True" {
+            return true
+        }
+        if result == "False" {
+            return false
+        }
+        
+        return false
+    }
+    
+    func ifServerEndAnalysis(dic: Dictionary<String, Any>!) -> Bool {
+        let result = dic["s"] as! String
+        
+        switch result {
+        case "End":
+            return true
+        case "Running":
+            return false
+        default:
+            return false
+        }
+    }
+    
+    func getAnalysisResult(dic: Dictionary<String, Any>!) -> String {
+        let result = dic["t"] as! String
+        
+        if result.isEmpty {
+            return ""
+        } else {
+            return result
         }
     }
 
