@@ -7,9 +7,11 @@
 //
 
 import UIKit
+import Foundation
 
 class ViewController: UIViewController, URLSessionTaskDelegate {
     
+    @IBOutlet weak var a: UIButton!
     @IBOutlet weak var logTextView: UITextView!
     @IBOutlet weak var progressView: UIProgressView!
     
@@ -20,6 +22,7 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         // Do any additional setup after loading the view, typically from a nib.
         
         self.resetState()
+        self.a.backgroundColor = UIColor.black
     }
     
     override func didReceiveMemoryWarning() {
@@ -343,7 +346,7 @@ class ViewController: UIViewController, URLSessionTaskDelegate {
         task.resume()
     }
     
-    // MARK:- 汪晶晶不爱我
+    // MARK:- 我爱龚雪
     
     func inputStringToLog(string: String) {
 //        DispatchQueue.main.sync {
